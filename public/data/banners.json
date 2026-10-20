@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "events": [],
   "sync": {
-    "lastAttemptAt": "2026-10-20T08:19:07.657Z",
+    "lastAttemptAt": "2026-10-20T08:33:25.837Z",
     "lastSuccessAt": null,
     "status": "error",
     "warnings": [
-      "CN: robots.txt: Network request failed (check official host / proxy access)",
-      "Global: robots.txt: Network request failed (check official host / proxy access)"
+      "CN: robots.txt: HTTP 404",
+      "Global: robots.txt unavailable or ambiguous; collection denied"
     ]
   }
 }
