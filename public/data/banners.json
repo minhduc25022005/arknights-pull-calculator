@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "events": [],
   "sync": {
-    "lastAttemptAt": "2026-10-20T08:33:25.837Z",
+    "lastAttemptAt": "2026-10-20T09:02:25.065Z",
     "lastSuccessAt": null,
     "status": "error",
     "warnings": [
-      "CN: robots.txt: HTTP 404",
-      "Global: robots.txt unavailable or ambiguous; collection denied"
+      "CN: terms not reviewed; page and article collection disabled",
+      "Global: robots.txt: ROBOTS_HTML: robots.txt returned HTML instead of robots rules; ambiguous policy (Content-Type: text/html)"
     ]
   }
 }
