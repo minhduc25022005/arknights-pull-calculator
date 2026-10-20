@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local environment values and private credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+
+# Local logs
+*.log
