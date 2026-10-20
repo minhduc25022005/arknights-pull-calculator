@@ -1,3 +1,4 @@
+import ManualBannerForm from "./ManualBannerForm";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -148,6 +149,7 @@ export default function BannerCalendar({
           gốc; ngày bắt đầu chỉ được dùng khi có múi giờ rõ ràng.
         </p>
       </div>
+      <ManualBannerForm />
       {(warnings.length > 0 ||
         stale ||
         catalog?.sync.status === "never" ||

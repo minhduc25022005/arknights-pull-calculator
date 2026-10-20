@@ -26,7 +26,21 @@ jobs:
       - name: Collect and validate official public data
         id: sync
         continue-on-error: true
-        run: npm run banners:sync
+        run: |
+          set +e
+          npm run --silent banners:sync > "$RUNNER_TEMP/banner-sync-report.json"
+          sync_status=$?
+          set -e
+          cat "$RUNNER_TEMP/banner-sync-report.json"
+          exit "$sync_status"
+      - name: Retain source HTTP and robots diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: banner-source-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/banner-sync-report.json
+          if-no-files-found: warn
+          retention-days: 7
       - run: npm test
       - run: npm run build
       - name: Commit only validated public-data changes

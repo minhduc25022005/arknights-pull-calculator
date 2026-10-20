@@ -35,6 +35,8 @@ Nguồn được phép xét:
 
 **Chưa có lần đồng bộ thông báo thực tế thành công.** Trong môi trường cloud, cả hai trang chủ và `robots.txt` bị proxy chặn CONNECT `403` trước khi kết nối tới website. Chưa xác minh được API/RSS công khai, URL điều khoản hoặc cấu trúc bài thật. Xem bằng chứng và các điều kiện mở adapter tại [docs/source-audit.md](docs/source-audit.md).
 
+Run GitHub Actions `39394219723` / job `118532842204` do người dùng cung cấp ghi nhận CN robots HTTP 404 và Global bị parser cũ đánh giá ambiguous. Các kết quả đó khác đường mạng cloud: tại đây vẫn bị CONNECT 403. HTTP 404 thật không được đánh đồng với proxy 403; riêng thông báo ambiguous cũ chưa chứng minh Global trả HTML hay MIME nào. Bản sửa ghi status, Content-Type và toàn bộ chuỗi redirect an toàn để xác định nguyên nhân ở lần chạy tiếp theo.
+
 `public/data/banners.json` ban đầu không có sự kiện được bịa sẵn. Calendar trống và cảnh báo đồng bộ là trạng thái có chủ ý khi chưa có dữ liệu được xác minh. Fixture tổng hợp chỉ dùng trong tests, không được phát hành thành banner thật.
 
 Sidebar có mục **Lịch banner**: lọc Global/CN/tất cả, tab đang diễn ra/sắp tới/đã kết thúc/**chưa có lịch**, nguồn gốc, ngày đăng, thời điểm cập nhật và countdown. Dữ liệu chính thức chưa công bố ngày được thể hiện riêng. Mốc dự đoán đã qua không có bằng chứng kết thúc sẽ nằm ở “Chưa có lịch”, không được trình bày như sự kiện đã thực sự diễn ra.
@@ -67,8 +69,12 @@ Trình duyệt chỉ tải JSON cùng origin ở `/data/banners.json`; không sc
 
 ```sh
 npm run banners:sync
+npm run banners:diagnose
+npm run banners:check -- /path/to/reviewed-banners.json
 npm run banners:import -- /path/to/reviewed-banners.json
 ```
+
+Trong **Lịch banner**, mở mục thu gọn **Chuẩn bị banner kiểm duyệt thủ công**. Nhập thông tin đúng bài thông báo, link gốc đúng server, ngày đăng và offset ghi rõ; chỉ điền ngày/Operator đã được nguồn xác nhận. Form yêu cầu xác nhận lại sau mỗi thay đổi. Tải `reviewed-banners.json`, chạy `banners:check` để kiểm tra mà **không ghi file**, rồi `banners:import`, xem diff và tạo commit/PR. Trang chủ hoặc anchor chung không đủ làm link thông báo. Form chỉ tạo tệp nhập, không tự công bố vào lịch hay sửa dữ liệu localStorage. Validation không thay thế việc người kiểm duyệt đọc nội dung thật.
 
 Import nhận `{ "schemaVersion": 1, "events": [...] }` theo kiểu `Banner` trong [src/banners.ts](src/banners.ts). Mọi bản ghi nhập phải có `origin: "manual"`, `reviewed: true`, URL thông báo thật, ngày đăng có offset, server và `confirmedFields` đúng nội dung được kiểm duyệt. Chưa biết Operator thì để `operators: []`; chưa biết ngày thì bỏ `startAt`/`endAt` và dùng trạng thái thích hợp. Sử dụng thời điểm cập nhật mới hơn khi sửa bản ghi, kiểm tra diff rồi review qua GitHub. Không dùng homepage hay bài cộng đồng làm bằng chứng cho ngày chưa được công bố.
 
@@ -82,6 +88,17 @@ Import hợp lệ được ghi vào `data/curated-banners.json` và hợp nhất
 4. Adapter hiện chỉ hỗ trợ thông báo HTML có JSON-LD `Event` chứa dữ kiện thời gian minh bạch. Đây là parser bảo thủ **chưa được xác minh trên website thật**; không khẳng định hai nguồn hiện xuất JSON-LD tương thích. Parser chỉ nhận Operator từ trường cấu trúc ghi rõ Operator, không từ một tên bất kỳ trong bài.
 5. Nếu nguồn thật dùng SPA/API/HTML khác, thêm adapter sau khi đã kiểm chứng cấu trúc/endpoint và fixture bài thật, rồi xác minh ít nhất một lần đồng bộ có dữ liệu thực. HTTP 200 hoặc JSON rỗng không đủ chứng minh thành công.
 
+### Robots và chẩn đoán HTTP theo RFC 9309
+
+- Robots HTTP **404/410 thật**: xem là file không có; RFC §2.3.1.3 cho phép MAY access, nhưng vẫn dừng nếu chưa duyệt điều khoản. Không tự bật `permitsAutomatedCollection`.
+- **401/403/429 thật**: lựa chọn bảo thủ của dự án là từ chối, không gọi chúng là 404. **5xx**, lỗi mạng, TLS và timeout: từ chối theo §2.3.1.4; không biến lỗi thành file allow-all.
+- Proxy **CONNECT 403**: không có HTTP response từ website; log `NETWORK_PROXY_DENIED` và không gán origin HTTP status giả. Lỗi body sau khi có header HTTP được ghi riêng.
+- UTF-8 `text/plain` rỗng, chỉ comment/Sitemap, BOM hoặc không có group phù hợp là hợp lệ; áp dụng các dòng parse được thay vì bắt buộc có `User-agent:`. Không có robots cache lưu giữa các job; khi không đọc được file và không có cache thì dừng bảo thủ.
+- **200 HTML/SPA/challenge**, Content-Type sai, charset không hỗ trợ hoặc bytes UTF-8 hỏng: từ chối với mã riêng và metadata, không giả vờ đó là 404. Content-Type thiếu được ghi `null`; chỉ chấp nhận văn bản không có dấu hiệu HTML.
+- Theo tối đa 5 redirect liên tiếp; robots có thể chuyển giữa các origin chính thức đã cho phép (www/apex Global). Từ chối rõ ràng redirect ngoài allowlist; không bypass proxy hoặc truy cập URL tùy ý.
+
+`npm run banners:diagnose` chạy kiểm tra nguồn thật và in JSON metadata, **không ghi curated/public data**. Mỗi nguồn có mã lỗi, HTTP status nếu thực sự nhận từ origin, Content-Type (kể cả null) và redirect chain. Chẩn đoán không lưu body, credentials hoặc query values. Khi không nhận sự kiện live hợp lệ, lệnh vẫn exit 2; chạy diagnostic không chứng minh sync thành công.
+
 Job kiểm tra robots, terms gate, host/HTTPS/redirect, giới hạn kích thước/timeout/số bài và crawl-delay. Không thực thi JavaScript website. Lỗi nguồn/parse/schema giữ sự kiện hợp lệ trước đó, ghi cảnh báo; không xóa lịch vì nguồn lỗi. Cache trình duyệt cũng giữ lịch hợp lệ khi không tải được JSON mới.
 
 `npm run banners:sync` trả exit **2** nếu không có bản ghi live hợp lệ; lỗi cấu hình/file cũ trả exit **1**. Import được kiểm duyệt có thể thành công trong khi live sync vẫn chưa hoạt động. Job log ghi từng lần thử; timestamp public chỉ thay khi dữ liệu/trạng thái có thay đổi ý nghĩa, tránh commit chỉ vì đồng hồ thay đổi. Do đó timestamp public là snapshot, không phải heartbeat; xem Actions để biết lần chạy mới nhất.
@@ -89,6 +106,8 @@ Job kiểm tra robots, terms gate, host/HTTPS/redirect, giới hạn kích thư�
 ## GitHub Actions và Vercel
 
 `.github/workflows/update-banners.yml` chạy mỗi ngày **02:17 UTC / 09:17 Việt Nam** và hỗ trợ **Run workflow**. Cron chỉ được GitHub chạy từ default branch sau khi workflow được merge vào `main`; trước merge có thể chọn branch feature khi chạy thủ công. Lịch GitHub có thể trễ, không phải SLA.
+
+Workflow lưu `banner-sync-report.json` thành artifact **banner-source-diagnostics-<run_id>-<attempt>** trong 7 ngày, kể cả khi sync lỗi. JSON report cũng được in vào log; đây là nơi kiểm tra riêng HTTP404/403, HTML/MIME và redirect của Global. Thu thập metadata không tự cấp quyền đọc bài khi terms chưa được duyệt.
 
 Job chỉ cấp `contents: write` để commit JSON hợp lệ có thay đổi, dùng `GITHUB_TOKEN` có sẵn; không cần API key trả phí. Chạy tests/build trước khi commit. Khi nguồn lỗi, vẫn lưu trạng thái có thay đổi và giữ dữ liệu cũ, sau đó đánh dấu workflow thất bại để không che giấu lỗi. Nếu branch protection chặn bot push, cần quyền cập nhật dữ liệu qua quy trình PR theo chính sách repository; workflow không bỏ qua bảo vệ.
 
