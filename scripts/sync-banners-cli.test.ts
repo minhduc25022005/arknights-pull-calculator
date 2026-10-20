@@ -53,6 +53,25 @@ const fixture = {
   origin: "manual",
   reviewed: true,
 };
+function reviewedPacket(events = [fixture]) {
+  return {
+    schemaVersion: 1,
+    events,
+    review: {
+      reviewer: "synthetic-cli-reviewer",
+      reviewedAt: "2026-10-01T08:00:00Z",
+      evidence: events.flatMap((event) =>
+        ["event", "publishedAt"].map((field) => ({
+          bannerId: event.id,
+          server: event.server,
+          sourceUrl: event.sources[0].url,
+          field,
+          quote: `Synthetic CLI evidence for ${field}; not a real announcement.`,
+        })),
+      ),
+    },
+  };
+}
 async function workspace() {
   const root = await mkdtemp(path.join(tmpdir(), "rhodes-job-test-"));
   temporary.push(root);
@@ -61,6 +80,7 @@ async function workspace() {
   for (const file of [
     "scripts/sync-banners.mjs",
     "scripts/banner-pipeline.mjs",
+    "scripts/manual-review.mjs",
     "src/banners.ts",
     "src/announcement-url.ts",
   ])
@@ -107,11 +127,109 @@ function runImport(root: string) {
   );
 }
 describe("manual CLI safety in an isolated checkout", () => {
+  it("rejects a new legacy-shaped nonempty import without evidence, preserving both files", async () => {
+    const root = await workspace();
+    const files = [
+      path.join(root, "data/curated-banners.json"),
+      path.join(root, "public/data/banners.json"),
+    ];
+    const before = await Promise.all(
+      files.map((file) => readFile(file, "utf8")),
+    );
+    await writeFile(
+      path.join(root, "incoming.json"),
+      JSON.stringify({ schemaVersion: 1, events: [fixture] }),
+    );
+    const result = runImport(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/review manifest/);
+    expect(
+      await Promise.all(files.map((file) => readFile(file, "utf8"))),
+    ).toEqual(before);
+  });
+  it("rejects wrong-source incoming quotes without changing existing data", async () => {
+    const root = await workspace();
+    const value = reviewedPacket();
+    value.review.evidence[0].sourceUrl =
+      "https://ak.hypergryph.com/news/unrelated-synthetic-fixture";
+    await writeFile(path.join(root, "incoming.json"), JSON.stringify(value));
+    const file = path.join(root, "public/data/banners.json"),
+      before = await readFile(file, "utf8");
+    const result = runImport(root);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/original official source/);
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+  it("preserves legacy curated events, earlier reviews and unrelated curated metadata", async () => {
+    const root = await workspace();
+    const legacy = {
+      ...fixture,
+      id: "legacy-event",
+      eventId: "legacy-event",
+      name: "Legacy synthetic event",
+    };
+    const prior = reviewedPacket([legacy]).review;
+    await writeFile(
+      path.join(root, "data/curated-banners.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        events: [legacy],
+        reviews: [prior],
+        maintainerNotes: { keep: "existing note" },
+      }),
+    );
+    await writeFile(
+      path.join(root, "incoming.json"),
+      JSON.stringify(reviewedPacket()),
+    );
+    const result = runImport(root);
+    expect(result.status, result.stderr).toBe(0);
+    const stored = JSON.parse(
+      await readFile(path.join(root, "data/curated-banners.json"), "utf8"),
+    );
+    expect(stored.events.map((e: { id: string }) => e.id).sort()).toEqual(
+      [fixture.id, legacy.id].sort(),
+    );
+    expect(stored.reviews).toHaveLength(2);
+    expect(stored.maintainerNotes).toEqual({ keep: "existing note" });
+    expect(stored.reviews[0].evidence[0].bannerId).toBe(legacy.id);
+  });
+  it("keeps default diagnostics from rewriting curated legacy records or existing review metadata", async () => {
+    const root = await workspace();
+    const file = path.join(root, "data/curated-banners.json");
+    await writeFile(
+      file,
+      JSON.stringify({
+        schemaVersion: 1,
+        events: [fixture],
+        reviews: [reviewedPacket().review],
+        note: "preserved",
+      }),
+    );
+    const before = await readFile(file, "utf8");
+    await writeFile(
+      path.join(root, "mock-fetch.mjs"),
+      "globalThis.fetch=async()=>new Response('unavailable',{status:503});",
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "./mock-fetch.mjs",
+        "scripts/sync-banners.mjs",
+        "--diagnose",
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(result.status, result.stderr).toBe(2);
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
   it("checks a reviewed file and its original source without changing either data file", async () => {
     const root = await workspace();
     await writeFile(
       path.join(root, "incoming.json"),
-      JSON.stringify({ schemaVersion: 1, events: [fixture] }),
+      JSON.stringify(reviewedPacket()),
     );
     const files = [
       path.join(root, "data/curated-banners.json"),
@@ -193,7 +311,7 @@ describe("manual CLI safety in an isolated checkout", () => {
     const root = await workspace();
     await writeFile(
       path.join(root, "incoming.json"),
-      JSON.stringify({ schemaVersion: 1, events: [fixture] }),
+      JSON.stringify(reviewedPacket()),
     );
     const result = runImport(root);
     expect(result.status, result.stderr).toBe(0);
@@ -204,21 +322,35 @@ describe("manual CLI safety in an isolated checkout", () => {
       await readFile(path.join(root, "public/data/banners.json"), "utf8"),
     );
     expect(curated.events).toHaveLength(1);
+    expect(curated.reviews).toHaveLength(1);
+    expect(curated.reviews[0].reviewer).toBe("synthetic-cli-reviewer");
+    expect(
+      curated.reviews[0].evidence.map((e: { field: string }) => e.field),
+    ).toEqual(["event", "publishedAt"]);
     expect(
       catalog.events.some((e: { id: string }) => e.id === fixture.id),
     ).toBe(true);
     expect(catalog.sync.lastSuccessAt).toBeNull();
     expect(JSON.parse(result.stdout).liveSyncVerified).toBe(false);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      verification: "human-attested",
+      reviewMethod: "reviewer-transcription",
+      sourceFetched: false,
+    });
   });
   it("is repeatable when the same reviewed file is imported twice", async () => {
     const root = await workspace();
     await writeFile(
       path.join(root, "incoming.json"),
-      JSON.stringify({ schemaVersion: 1, events: [fixture] }),
+      JSON.stringify(reviewedPacket()),
     );
     expect(runImport(root).status).toBe(0);
     const first = await readFile(
       path.join(root, "public/data/banners.json"),
+      "utf8",
+    );
+    const firstCurated = await readFile(
+      path.join(root, "data/curated-banners.json"),
       "utf8",
     );
     const result = runImport(root);
@@ -226,6 +358,10 @@ describe("manual CLI safety in an isolated checkout", () => {
     expect(
       await readFile(path.join(root, "public/data/banners.json"), "utf8"),
     ).toBe(first);
+    expect(
+      await readFile(path.join(root, "data/curated-banners.json"), "utf8"),
+    ).toBe(firstCurated);
+    expect(JSON.parse(result.stdout).changed).toBe(false);
   });
   it("leaves unreadable existing public data untouched", async () => {
     const root = await workspace(),

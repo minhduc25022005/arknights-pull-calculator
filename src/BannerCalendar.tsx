@@ -7,7 +7,13 @@ import {
   Clock3,
   ExternalLink,
 } from "lucide-react";
-import { formatBannerTime, phase, type Banner, type Catalog } from "./banners";
+import {
+  formatBannerTime,
+  formatSourceDate,
+  phase,
+  type Banner,
+  type Catalog,
+} from "./banners";
 import "./banner-calendar.css";
 
 type Props = {
@@ -379,12 +385,11 @@ export default function BannerCalendar({
                         <ExternalLink size={11} />
                       </a>
                       <small>
-                        Đăng:{" "}
                         <time
                           dateTime={source.publishedAt}
                           title={source.publishedAt}
                         >
-                          {format(source.publishedAt)}
+                          {formatSourceDate(source, timeZone)}
                         </time>
                         {source.kind !== "official" && " · Tham khảo cộng đồng"}
                       </small>

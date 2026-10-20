@@ -1,7 +1,13 @@
 import { useId, useState, type FormEvent } from "react";
-import { Download, FileCheck2 } from "lucide-react";
-import { buildManualBanner, type ManualBannerInput } from "./manual-banner";
-import type { Category, Server } from "./banners";
+import { Download, ExternalLink, FileCheck2, ScanText } from "lucide-react";
+import {
+  buildReviewedPackage,
+  isAnnouncementUrl,
+  type ManualBannerInput,
+  type ManualReviewPackage,
+  type ManualEvidenceField,
+} from "./manual-banner";
+import { formatSourceDate, type Category, type Server } from "./banners";
 import "./manual-banner.css";
 
 const empty: ManualBannerInput = {
@@ -14,18 +20,36 @@ const empty: ManualBannerInput = {
   sourceName: "",
   publishedLocal: "",
   publishedOffset: "",
+  publicationMode: "instant",
+  publicationKind: "published",
+  publishedDay: "",
   startLocal: "",
   startOffset: "",
   endLocal: "",
   endOffset: "",
   operators: "",
   reviewed: false,
+  reviewer: "",
+  eventQuote: "",
+  publishedQuote: "",
+  startQuote: "",
+  endQuote: "",
+  operatorsQuote: "",
+};
+
+const evidenceLabels: Record<ManualEvidenceField, string> = {
+  event: "Sự kiện và server",
+  publishedAt: "Ngày đăng/cập nhật và độ chính xác nguồn",
+  startAt: "Ngày bắt đầu",
+  endAt: "Ngày kết thúc",
+  operators: "Operator",
 };
 
 export default function ManualBannerForm() {
   const [input, setInput] = useState<ManualBannerInput>(empty);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [preview, setPreview] = useState<ManualReviewPackage | null>(null);
   const sectionId = useId();
   function change<K extends keyof ManualBannerInput>(
     key: K,
@@ -38,6 +62,7 @@ export default function ManualBannerForm() {
     }));
     setError("");
     setMessage("");
+    if (key !== "reviewed") setPreview(null);
   }
   function field(
     key: "id" | "eventId" | "name" | "sourceUrl" | "sourceName",
@@ -96,9 +121,10 @@ export default function ManualBannerForm() {
   function download(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const banner = buildManualBanner(input, new Date().toISOString());
-      const body =
-        JSON.stringify({ schemaVersion: 1, events: [banner] }, null, 2) + "\n";
+      if (!preview)
+        throw new Error("Xem bản kiểm tra trước khi xác nhận và tải JSON.");
+      const reviewed = buildReviewedPackage(input, new Date().toISOString());
+      const body = JSON.stringify(reviewed, null, 2) + "\n";
       const url = URL.createObjectURL(
         new Blob([body], { type: "application/json" }),
       );
@@ -108,7 +134,7 @@ export default function ManualBannerForm() {
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setMessage(
-        "Đã tạo tệp nhập. Lịch công khai và dữ liệu tài nguyên chưa thay đổi.",
+        "Đã tạo tệp nhập kèm hồ sơ kiểm duyệt. Lịch công khai và dữ liệu tài nguyên chưa thay đổi.",
       );
       setError("");
     } catch (cause) {
@@ -117,6 +143,53 @@ export default function ManualBannerForm() {
       );
       setMessage("");
     }
+  }
+  function preparePreview() {
+    try {
+      // Preview is explicitly a draft. The final export independently requires
+      // the user's checkbox and runs all validation again.
+      setPreview(
+        buildReviewedPackage(
+          { ...input, reviewed: true },
+          new Date().toISOString(),
+        ),
+      );
+      setInput((old) => ({ ...old, reviewed: false }));
+      setError("");
+      setMessage("");
+    } catch (cause) {
+      setPreview(null);
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Không thể chuẩn bị bản kiểm tra.",
+      );
+    }
+  }
+  function quoteField(
+    key:
+      | "eventQuote"
+      | "publishedQuote"
+      | "startQuote"
+      | "endQuote"
+      | "operatorsQuote",
+    label: string,
+  ) {
+    return (
+      <label className="field manual-quote">
+        <span>{label}</span>
+        <textarea
+          rows={2}
+          maxLength={4000}
+          value={input[key] || ""}
+          onChange={(e) => change(key, e.target.value)}
+        />
+        <small>
+          Chép nguyên văn từ thông báo, gồm múi giờ nếu nguồn có giờ. Nội dung
+          này được lưu cùng hồ sơ kiểm duyệt.
+        </small>
+      </label>
+    );
   }
   return (
     <details className="card manual-banner-form">
@@ -175,12 +248,75 @@ export default function ManualBannerForm() {
             "Link thông báo gốc",
             "Dán URL bài chính thức đúng server. Trang chủ không đủ bằng chứng.",
           )}
+          {isAnnouncementUrl(input.sourceUrl.trim(), input.server) && (
+            <a
+              className="manual-source-link"
+              href={input.sourceUrl.trim()}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Mở thông báo gốc để kiểm tra <ExternalLink size={13} />
+            </a>
+          )}
           {field("sourceName", "Tên nguồn")}
-          {timeField("Ngày đăng", "publishedLocal", "publishedOffset", true)}
+          <div className="manual-pair">
+            <label className="field">
+              <span>Loại ngày nguồn</span>
+              <select
+                aria-label="Loại ngày nguồn"
+                value={input.publicationKind || "published"}
+                onChange={(e) =>
+                  change(
+                    "publicationKind",
+                    e.target.value as "published" | "updated",
+                  )
+                }
+              >
+                <option value="published">Ngày đăng</option>
+                <option value="updated">Ngày cập nhật nguồn</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Độ chính xác ngày nguồn</span>
+              <select
+                aria-label="Độ chính xác ngày nguồn"
+                value={input.publicationMode || "instant"}
+                onChange={(e) =>
+                  change("publicationMode", e.target.value as "instant" | "day")
+                }
+              >
+                <option value="instant">Có ngày, giờ và offset nguồn</option>
+                <option value="day">Chỉ có ngày, chưa có giờ</option>
+              </select>
+            </label>
+          </div>
+          {input.publicationMode === "day" ? (
+            <label className="field">
+              <span>Ngày nguồn · không có giờ</span>
+              <input
+                type="date"
+                required
+                aria-label="Ngày nguồn chỉ có ngày"
+                value={input.publishedDay || ""}
+                onChange={(e) => change("publishedDay", e.target.value)}
+              />
+            </label>
+          ) : (
+            timeField(
+              input.publicationKind === "updated"
+                ? "Ngày cập nhật"
+                : "Ngày đăng",
+              "publishedLocal",
+              "publishedOffset",
+              true,
+            )
+          )}
           <p className="manual-time-help">
-            Nhập offset được nguồn xác nhận, không lấy múi giờ thiết bị làm mặc
-            định. Bỏ trống ngày/Operator chưa được thông báo; không dùng ngày
-            đăng làm ngày bắt đầu.
+            {input.publicationMode === "day"
+              ? "Giữ nguyên ngày lịch ghi trên nguồn, không tự thêm giờ 00:00 hoặc múi giờ. Ngày bắt đầu/kết thúc sự kiện nếu nhập vẫn phải có giờ và offset được xác nhận."
+              : "Nhập offset được nguồn xác nhận, không lấy múi giờ thiết bị làm mặc định."}{" "}
+            Bỏ trống ngày/Operator chưa được thông báo; không dùng ngày đăng/cập
+            nhật làm ngày bắt đầu.
           </p>
           {timeField("Ngày bắt đầu", "startLocal", "startOffset")}
           {timeField("Ngày kết thúc", "endLocal", "endOffset")}
@@ -196,6 +332,119 @@ export default function ManualBannerForm() {
               nhận Operator Global.
             </small>
           </label>
+          <fieldset className="manual-evidence-fields">
+            <legend>Hồ sơ dẫn chứng từ thông báo</legend>
+            <p className="manual-notice">
+              Những trích dẫn dưới đây là bằng chứng do người kiểm duyệt cung
+              cấp. Website không đọc nguồn hoặc tự xác minh nội dung của chúng.
+            </p>
+            <label className="field">
+              <span>Người kiểm duyệt</span>
+              <input
+                type="text"
+                maxLength={200}
+                value={input.reviewer || ""}
+                onChange={(e) => change("reviewer", e.target.value)}
+              />
+              <small>
+                Tên sẽ được lưu trong hồ sơ review trên Git; không nhập thông
+                tin liên hệ riêng tư.
+              </small>
+            </label>
+            {quoteField("eventQuote", "Trích dẫn xác nhận sự kiện và server")}
+            {quoteField(
+              "publishedQuote",
+              "Trích dẫn ngày đăng/cập nhật và độ chính xác nguồn",
+            )}
+            {input.startLocal.trim() &&
+              quoteField("startQuote", "Trích dẫn ngày bắt đầu")}
+            {input.endLocal.trim() &&
+              quoteField("endQuote", "Trích dẫn ngày kết thúc")}
+            {input.operators.trim() &&
+              quoteField("operatorsQuote", "Trích dẫn Operator được xác nhận")}
+          </fieldset>
+          <button
+            type="button"
+            className="manual-preview-button"
+            onClick={preparePreview}
+          >
+            <ScanText size={14} />
+            Xem bản kiểm tra trước khi tải
+          </button>
+          {preview && (
+            <section
+              className="manual-evidence-preview"
+              aria-label="Bản kiểm tra banner"
+            >
+              <div className="manual-draft-label">
+                BẢN KIỂM TRA · CHƯA CÔNG BỐ
+              </div>
+              <h4>{preview.events[0].name}</h4>
+              <p>
+                Dữ liệu dưới đây được chuẩn hóa từ thông tin bạn nhập, chưa phải
+                kết quả đọc nguồn tự động.
+              </p>
+              <dl>
+                <dt>Server / ID</dt>
+                <dd>
+                  {preview.events[0].server} / {preview.events[0].id}
+                </dd>
+                <dt>Thông báo gốc</dt>
+                <dd>
+                  <a
+                    href={preview.events[0].sources[0].url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {preview.events[0].sources[0].url}
+                    <ExternalLink size={12} />
+                  </a>
+                </dd>
+                <dt>Phân loại sau khi review được chấp nhận</dt>
+                <dd>
+                  Chính thức · kiểm duyệt thủ công /{" "}
+                  {preview.events[0].scheduleState === "announced"
+                    ? "Đã công bố, chưa có ngày"
+                    : "Có ngày theo dẫn chứng"}
+                </dd>
+                <dt>Ngày đăng/cập nhật nguồn</dt>
+                <dd>
+                  {formatSourceDate(preview.events[0].sources[0], "UTC")}
+                  <small>
+                    Giá trị JSON: {preview.events[0].sources[0].publishedAt}
+                  </small>
+                </dd>
+                <dt>Bắt đầu / kết thúc chuẩn hóa UTC</dt>
+                <dd>
+                  {preview.events[0].startAt || "Chưa xác nhận"} /{" "}
+                  {preview.events[0].endAt || "Chưa xác nhận"}
+                </dd>
+                <dt>Operator</dt>
+                <dd>
+                  {preview.events[0].operators.join(" · ") || "Chưa xác nhận"}
+                </dd>
+                <dt>Người kiểm duyệt</dt>
+                <dd>{preview.review.reviewer}</dd>
+              </dl>
+              <div className="manual-preview-quotes">
+                {preview.review.evidence.map((item) => (
+                  <div key={item.field}>
+                    <strong>{evidenceLabels[item.field]}</strong>
+                    <blockquote>{item.quote}</blockquote>
+                  </div>
+                ))}
+              </div>
+              <details className="manual-json-preview">
+                <summary>Xem JSON chuẩn bị nhập</summary>
+                <pre>{JSON.stringify(preview, null, 2)}</pre>
+              </details>
+              <p>
+                Chỉ được công bố sau khi người quản lý kiểm tra hồ sơ, chạy
+                check/import và review thay đổi qua Git. Xuất JSON không chứng
+                minh quyền thu thập hoặc đồng bộ live.
+              </p>
+            </section>
+          )}
           <label className="manual-review">
             <input
               type="checkbox"
@@ -204,8 +453,9 @@ export default function ManualBannerForm() {
               onChange={(e) => change("reviewed", e.target.checked)}
             />
             <span>
-              Tôi đã đọc thông báo gốc và xác minh server, ngày đăng, các ngày
-              sự kiện và Operator đã nhập. Mọi lần sửa sẽ yêu cầu xác nhận lại.
+              Tôi đã đọc thông báo gốc và xác minh server, ngày đăng/cập nhật,
+              các ngày sự kiện và Operator đã nhập. Mọi lần sửa sẽ yêu cầu xác
+              nhận lại.
             </span>
           </label>
           {error && (
@@ -218,7 +468,11 @@ export default function ManualBannerForm() {
               {message}
             </p>
           )}
-          <button type="submit" className="manual-download">
+          <button
+            type="submit"
+            className="manual-download"
+            disabled={!preview || !input.reviewed}
+          >
             <Download size={14} />
             Tải JSON đã kiểm duyệt
           </button>

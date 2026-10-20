@@ -6,6 +6,7 @@ import {
   validateCatalog,
   dayInZone,
   formatBannerTime,
+  formatSourceDate,
   phase,
   isOfficialUrl,
   type Banner,
@@ -392,5 +393,153 @@ describe("timezone and phase behavior", () => {
       now,
     ).find((e) => e.status === "predicted")!;
     expect(phase(prediction, "2030-01-01T00:00:00Z")).toBe("undated");
+  });
+});
+
+describe("publication metadata precision", () => {
+  function dayNotice(): Banner {
+    const banner = official(
+      "sealed-with-time-2026",
+      "Global",
+      "2026-10-14T08:00:00-07:00",
+      {
+        name: "Sealed With Time",
+        category: "limited",
+        endAt: "2026-10-28T03:59:00-07:00",
+        operators: ["Kal'tsit Esperanta", "Closure", "Crackborne"],
+        updatedAt: "2026-10-20T08:00:00Z",
+        origin: "manual",
+        reviewed: true,
+      },
+    );
+    banner.sources = [
+      {
+        url: "https://www.arknights.global/news/4814",
+        name: "Arknights Global",
+        server: "Global",
+        kind: "official",
+        confirmedFields: ["event", "startAt", "endAt", "operators"],
+        publishedAt: "2026-10-09",
+        publicationPrecision: "day",
+        publicationKind: "updated",
+      },
+    ];
+    return banner;
+  }
+  it("retains a reviewed day-only update without inventing midnight", () => {
+    const source = normalizeBanners([dayNotice()])[0].sources[0];
+    expect(source.publishedAt).toBe("2026-10-09");
+    expect(source.publicationKind).toBe("updated");
+    expect(source.publicationPrecision).toBe("day");
+    const expected = "Ngày cập nhật: 09/10/2026 (chưa có giờ)";
+    expect(formatSourceDate(source, "Asia/Ho_Chi_Minh")).toBe(expected);
+    expect(formatSourceDate(source, "America/Los_Angeles")).toBe(expected);
+    expect(formatSourceDate(source, "UTC")).toBe(expected);
+    expect(formatSourceDate({ ...source, publicationKind: "published" })).toBe(
+      "Ngày đăng: 09/10/2026 (chưa có giờ)",
+    );
+  });
+  it("requires explicit day precision and rejects invalid calendar metadata", () => {
+    const banner = dayNotice();
+    expect(() =>
+      normalizeBanners([
+        {
+          ...banner,
+          sources: [{ ...banner.sources[0], publicationPrecision: undefined }],
+        },
+      ]),
+    ).toThrow(/publication date/);
+    expect(() =>
+      normalizeBanners([
+        {
+          ...banner,
+          sources: [{ ...banner.sources[0], publicationPrecision: "instant" }],
+        },
+      ]),
+    ).toThrow(/publication date/);
+    for (const publishedAt of [
+      "2026-02-30",
+      "2026-13-09",
+      "2026-10-00",
+      "2026-10-09T00:00:00Z",
+    ]) {
+      expect(() =>
+        normalizeBanners([
+          { ...banner, sources: [{ ...banner.sources[0], publishedAt }] },
+        ]),
+      ).toThrow(/publication date/);
+    }
+    expect(() =>
+      normalizeBanners([
+        {
+          ...banner,
+          sources: [{ ...banner.sources[0], publishedAt: "2024-02-29" }],
+        },
+      ]),
+    ).not.toThrow();
+  });
+  it("still requires exact timezone instants for event schedules and updates", () => {
+    const banner = dayNotice();
+    expect(() =>
+      normalizeBanners([{ ...banner, startAt: "2026-10-14" }]),
+    ).toThrow(/start date/);
+    expect(() =>
+      normalizeBanners([{ ...banner, endAt: "2026-10-28" }]),
+    ).toThrow(/end date/);
+    expect(() =>
+      normalizeBanners([{ ...banner, updatedAt: "2026-10-20" }]),
+    ).toThrow(/update date/);
+  });
+  it("keeps legacy ISO source shape and exact-instant formatting compatible", () => {
+    const source = normalizeBanners([official()])[0].sources[0];
+    expect(source.publishedAt).toBe("2023-12-20T00:00:00.000Z");
+    expect(source).not.toHaveProperty("publicationPrecision");
+    expect(source).not.toHaveProperty("publicationKind");
+    expect(formatSourceDate(source)).toBe(
+      `Đăng: ${formatBannerTime(source.publishedAt)}`,
+    );
+    expect(
+      formatSourceDate({
+        ...source,
+        publicationKind: "updated",
+        publicationPrecision: "instant",
+      }),
+    ).toBe(`Cập nhật: ${formatBannerTime(source.publishedAt)}`);
+  });
+  it("converts the user-provided Sealed With Time schedule exactly and records manual provenance", () => {
+    const banner = normalizeBanners([dayNotice()])[0];
+    expect(banner.status).toBe("official");
+    expect(banner.server).toBe("Global");
+    expect(banner.startAt).toBe("2026-10-14T15:00:00.000Z");
+    expect(banner.endAt).toBe("2026-10-28T10:59:00.000Z");
+    expect(formatBannerTime(banner.startAt!, "Asia/Ho_Chi_Minh")).toContain(
+      "22:00",
+    );
+    expect(formatBannerTime(banner.endAt!, "Asia/Ho_Chi_Minh")).toContain(
+      "17:59",
+    );
+    expect(dayInZone(banner.startAt!)).toBe("2026-10-14");
+    expect(dayInZone(banner.endAt!)).toBe("2026-10-28");
+    expect(banner.operators).toEqual([
+      "Closure",
+      "Crackborne",
+      "Kal'tsit Esperanta",
+    ]);
+    const catalog = validateCatalog({
+      schemaVersion: 1,
+      events: [banner],
+      sync: {
+        lastAttemptAt: "2026-10-20T08:00:00Z",
+        lastSuccessAt: null,
+        status: "error",
+        warnings: [
+          "CONNECT 403; reviewed from the user-supplied official announcement",
+        ],
+      },
+    });
+    expect(catalog.events[0].origin).toBe("manual");
+    expect(catalog.events[0].reviewed).toBe(true);
+    expect(catalog.sync.lastSuccessAt).toBeNull();
+    expect(catalog.sync.status).toBe("error");
   });
 });

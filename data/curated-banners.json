@@ -1,4 +1,86 @@
 {
   "schemaVersion": 1,
-  "events": []
+  "events": [
+    {
+      "id": "global-sealed-with-time-2026-10",
+      "eventId": "sealed-with-time-2026-10",
+      "name": "Sealed With Time",
+      "server": "Global",
+      "category": "limited",
+      "operators": [
+        "Closure",
+        "Crackborne",
+        "Kal'tsit Esperanta (Limited)"
+      ],
+      "status": "official",
+      "scheduleState": "scheduled",
+      "sources": [
+        {
+          "url": "https://www.arknights.global/news/4814",
+          "name": "Arknights Global · thông báo 4814",
+          "publishedAt": "2026-10-09",
+          "server": "Global",
+          "confirmedFields": [
+            "endAt",
+            "event",
+            "operators",
+            "startAt"
+          ],
+          "kind": "official",
+          "publicationPrecision": "day",
+          "publicationKind": "updated"
+        }
+      ],
+      "updatedAt": "2026-10-20T09:17:21.725Z",
+      "origin": "manual",
+      "reviewed": true,
+      "startAt": "2026-10-14T15:00:00.000Z",
+      "endAt": "2026-10-28T10:59:00.000Z"
+    }
+  ],
+  "reviews": [
+    {
+      "reviewer": "Thông tin thông báo do người dùng cung cấp trong phiên làm việc",
+      "method": "user-provided-extract",
+      "sourceFetched": false,
+      "reviewedAt": "2026-10-20T09:17:21.725Z",
+      "evidence": [
+        {
+          "bannerId": "global-sealed-with-time-2026-10",
+          "server": "Global",
+          "sourceUrl": "https://www.arknights.global/news/4814",
+          "field": "endAt",
+          "quote": "Ngày kết thúc: 28/10/2026, 03:59 (UTC-7)"
+        },
+        {
+          "bannerId": "global-sealed-with-time-2026-10",
+          "server": "Global",
+          "sourceUrl": "https://www.arknights.global/news/4814",
+          "field": "event",
+          "quote": "Tên banner: Sealed With Time\nServer: Global\nLoại: Limited Headhunting\nVị trí thông tin: Mục 02 LIMITED HEADHUNTING OPEN – SEALED WITH TIME."
+        },
+        {
+          "bannerId": "global-sealed-with-time-2026-10",
+          "server": "Global",
+          "sourceUrl": "https://www.arknights.global/news/4814",
+          "field": "operators",
+          "quote": "Operator 6★ nổi bật: Kal'tsit Esperanta (Limited), Closure\nOperator 5★ nổi bật: Crackborne"
+        },
+        {
+          "bannerId": "global-sealed-with-time-2026-10",
+          "server": "Global",
+          "sourceUrl": "https://www.arknights.global/news/4814",
+          "field": "publishedAt",
+          "quote": "Thông báo được cập nhật ngày 09/10/2026."
+        },
+        {
+          "bannerId": "global-sealed-with-time-2026-10",
+          "server": "Global",
+          "sourceUrl": "https://www.arknights.global/news/4814",
+          "field": "startAt",
+          "quote": "Ngày bắt đầu: 14/10/2026, 08:00 (UTC-7)"
+        }
+      ]
+    }
+  ]
 }

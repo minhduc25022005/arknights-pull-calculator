@@ -19,12 +19,41 @@ export interface ManualBannerInput {
   sourceName: string;
   publishedLocal: string;
   publishedOffset: string;
+  publicationMode?: "instant" | "day";
+  publicationKind?: "published" | "updated";
+  publishedDay?: string;
   startLocal: string;
   startOffset: string;
   endLocal: string;
   endOffset: string;
   operators: string;
   reviewed: boolean;
+  reviewer?: string;
+  eventQuote?: string;
+  publishedQuote?: string;
+  startQuote?: string;
+  endQuote?: string;
+  operatorsQuote?: string;
+}
+
+export type ManualEvidenceField =
+  "event" | "publishedAt" | "startAt" | "endAt" | "operators";
+export interface ManualReviewPackage {
+  schemaVersion: 1;
+  events: Banner[];
+  review: {
+    reviewer: string;
+    reviewedAt: string;
+    method?: "reviewer-transcription" | "user-provided-extract";
+    sourceFetched?: false;
+    evidence: {
+      bannerId: string;
+      server: Server;
+      sourceUrl: string;
+      field: ManualEvidenceField;
+      quote: string;
+    }[];
+  };
 }
 
 /** Parse only a source-specified offset; never use the browser/machine timezone. */
@@ -80,11 +109,24 @@ export function buildManualBanner(
       "Chỉ nhập ngày kết thúc khi thông báo đã xác nhận ngày bắt đầu.",
     );
   }
-  const publishedAt = sourceTimestamp(
-    input.publishedLocal,
-    input.publishedOffset,
-    "Ngày đăng",
-  );
+  const publicationMode = input.publicationMode ?? "instant";
+  const publicationKind = input.publicationKind ?? "published";
+  if (
+    !["instant", "day"].includes(publicationMode) ||
+    !["published", "updated"].includes(publicationKind)
+  ) {
+    throw new Error("Chọn độ chính xác và loại ngày thông báo hợp lệ.");
+  }
+  // Day precision is source calendar metadata, not an instant. The shared
+  // normalizer checks its real Gregorian date without inventing midnight/offset.
+  const publishedAt =
+    publicationMode === "day"
+      ? input.publishedDay?.trim() || ""
+      : sourceTimestamp(
+          input.publishedLocal,
+          input.publishedOffset,
+          "Ngày đăng/cập nhật",
+        );
   const startAt = input.startLocal.trim()
     ? sourceTimestamp(input.startLocal, input.startOffset, "Ngày bắt đầu")
     : undefined;
@@ -120,6 +162,8 @@ export function buildManualBanner(
           url: input.sourceUrl.trim(),
           name: input.sourceName.trim(),
           publishedAt,
+          ...(publicationMode === "day" ? { publicationPrecision: "day" } : {}),
+          ...(input.publicationKind !== undefined ? { publicationKind } : {}),
           server: input.server,
           confirmedFields,
           kind: "official",
@@ -131,4 +175,77 @@ export function buildManualBanner(
     },
   ]);
   return banner;
+}
+
+/** Stores a human review trail; quotes are never scraped or interpreted as facts. */
+export function buildReviewedPackage(
+  input: ManualBannerInput,
+  now: string,
+): ManualReviewPackage {
+  const banner = buildManualBanner(input, now);
+  const reviewer = input.reviewer?.trim() || "";
+  if (!reviewer || reviewer.length > 200) {
+    throw new Error("Điền tên người kiểm duyệt (tối đa 200 ký tự).");
+  }
+  const required: [ManualEvidenceField, string | undefined, string][] = [
+    ["event", input.eventQuote, "tên và server của sự kiện"],
+    [
+      "publishedAt",
+      input.publishedQuote,
+      "ngày đăng/cập nhật và độ chính xác nguồn",
+    ],
+    ...(banner.startAt
+      ? [
+          ["startAt", input.startQuote, "ngày bắt đầu"] as [
+            ManualEvidenceField,
+            string | undefined,
+            string,
+          ],
+        ]
+      : []),
+    ...(banner.endAt
+      ? [
+          ["endAt", input.endQuote, "ngày kết thúc"] as [
+            ManualEvidenceField,
+            string | undefined,
+            string,
+          ],
+        ]
+      : []),
+    ...(banner.operators.length
+      ? [
+          ["operators", input.operatorsQuote, "Operator"] as [
+            ManualEvidenceField,
+            string | undefined,
+            string,
+          ],
+        ]
+      : []),
+  ];
+  const evidence = required.map(([field, value, label]) => {
+    const quote = value?.trim() || "";
+    if (!quote || quote.length > 4000) {
+      throw new Error(
+        `Cần trích dẫn nguyên văn cho ${label} (tối đa 4.000 ký tự).`,
+      );
+    }
+    return {
+      bannerId: banner.id,
+      server: banner.server,
+      sourceUrl: banner.sources[0].url,
+      field,
+      quote,
+    };
+  });
+  return {
+    schemaVersion: 1,
+    events: [banner],
+    review: {
+      reviewer,
+      reviewedAt: new Date(now).toISOString(),
+      method: "reviewer-transcription",
+      sourceFetched: false,
+      evidence,
+    },
+  };
 }

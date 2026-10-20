@@ -1,6 +1,43 @@
 {
   "schemaVersion": 1,
-  "events": [],
+  "events": [
+    {
+      "id": "global-sealed-with-time-2026-10",
+      "eventId": "sealed-with-time-2026-10",
+      "name": "Sealed With Time",
+      "server": "Global",
+      "category": "limited",
+      "operators": [
+        "Closure",
+        "Crackborne",
+        "Kal'tsit Esperanta (Limited)"
+      ],
+      "status": "official",
+      "scheduleState": "scheduled",
+      "sources": [
+        {
+          "url": "https://www.arknights.global/news/4814",
+          "name": "Arknights Global · thông báo 4814",
+          "publishedAt": "2026-10-09",
+          "server": "Global",
+          "confirmedFields": [
+            "endAt",
+            "event",
+            "operators",
+            "startAt"
+          ],
+          "kind": "official",
+          "publicationPrecision": "day",
+          "publicationKind": "updated"
+        }
+      ],
+      "updatedAt": "2026-10-20T09:17:21.725Z",
+      "origin": "manual",
+      "reviewed": true,
+      "startAt": "2026-10-14T15:00:00.000Z",
+      "endAt": "2026-10-28T10:59:00.000Z"
+    }
+  ],
   "sync": {
     "lastAttemptAt": "2026-10-20T09:02:25.065Z",
     "lastSuccessAt": null,

@@ -1,0 +1,53 @@
+name: Manually inspect official banner sources
+
+on:
+  workflow_dispatch:
+    inputs:
+      announcement_url:
+        description: "Optional original official announcement URL to inspect once; no linked pages are fetched"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Inspect only official homepage and robots responses
+        id: inspect
+        continue-on-error: true
+        env:
+          AUDIT_ANNOUNCEMENT_URL: ${{ inputs.announcement_url }}
+        run: |
+          set +e
+          audit_args=()
+          if [ -n "$AUDIT_ANNOUNCEMENT_URL" ]; then
+            audit_args=(--announcement "$AUDIT_ANNOUNCEMENT_URL")
+          fi
+          node --use-env-proxy scripts/audit-sources.mjs "${audit_args[@]}" > "$RUNNER_TEMP/banner-source-manual-audit.json"
+          audit_status=$?
+          set -e
+          cat "$RUNNER_TEMP/banner-source-manual-audit.json"
+          exit "$audit_status"
+      - name: Retain manual policy-investigation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: banner-source-manual-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/banner-source-manual-audit.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Report unverified collection permission
+        if: steps.inspect.outcome != 'success'
+        run: |
+          echo 'Manual evidence is not collection permission or a successful event synchronization. Review the artifact; no source policy or public records were changed.'
+          exit 1

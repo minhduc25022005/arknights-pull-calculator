@@ -88,3 +88,70 @@ The source-access prerequisite is unresolved in this cloud instance. This audit 
 `npm run --silent banners:diagnose` was executed in the cloud machine at **2026-10-20T08:45:41.950Z** (15:45:41 Vietnam). It returned exit `2`, `liveRecords: 0`, `written: false`. Both sources were classified as `NETWORK_PROXY_DENIED` with no origin `httpStatus`, no redirect response and no response body. The diagnostic did not modify the public catalog or curated records. This checks the live error path, **not** a successful official-event synchronization. The source-policy flags remain unchanged and disabled.
 
 The next Actions run will print the structured report and retain it as `banner-source-diagnostics-<run_id>-<attempt>` for seven days. That future report is required to establish the actual Global HTTP response, MIME type and redirect path on the GitHub-hosted runner; no specific upstream HTML fallback or endpoint is asserted in advance.
+
+## Actions #2 follow-up: HTML robots response is confirmed, its cause is not
+
+The user supplied confirmed results from **GitHub Actions #2, run `39397725727`**:
+
+| Source/stage     | Runner observation                                           | Correct interpretation                                                                                            |
+| ---------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Global robots    | HTTP `200`, `Content-Type: text/html`, `ROBOTS_HTML`, `deny` | The response is not a usable robots representation. HTML must not be parsed as an empty allow-all file.           |
+| CN robots        | HTTP `404`, `ROBOTS_NOT_FOUND`, `allow-no-file`              | The missing-file handling now distinguishes a real HTTP `404` from transport failures.                            |
+| CN source policy | `TERMS_UNREVIEWED`, `deny`                                   | Robots availability does not grant terms approval. Page/article collection remains disabled.                      |
+| Live result      | `liveRecords: 0`; tests and build pass                       | No real banner has been synchronized. Passing engineering checks do not verify upstream event data or permission. |
+
+These facts narrow the Global failure to an HTML response, but **do not establish whether the HTML is an SPA fallback, a challenge/protection page, a generic error page, or another website/server configuration**. The supplied report does not include the body, page title, root/app markers, asset references, final URL or a homepage comparison. A Content-Type alone cannot distinguish those causes.
+
+### Current-cloud evidence and access limitation
+
+Rechecked on **2026-10-20 at 09:09 UTC / 16:09 Vietnam** using TLS verification, a five-redirect limit and bounded request timeouts:
+
+| Requested URL                             | curl exit | Proxy CONNECT | Origin HTTP          | Origin Content-Type | Redirect count / downloaded bytes |
+| ----------------------------------------- | --------- | ------------- | -------------------- | ------------------- | --------------------------------- |
+| `https://www.arknights.global/robots.txt` | 56        | 403           | Not received (`000`) | Not received        | 0 / 0                             |
+| `https://www.arknights.global/`           | 56        | 403           | Not received (`000`) | Not received        | 0 / 0                             |
+| `https://ak.hypergryph.com/robots.txt`    | 56        | 403           | Not received (`000`) | Not received        | 0 / 0                             |
+| `https://ak.hypergryph.com/`              | 56        | 403           | Not received (`000`) | Not received        | 0 / 0                             |
+
+Each curl request reported `CONNECT tunnel failed, response 403`. No origin HTML, robots representation or redirect was received. `gh run view 39397725727 --repo minhduc25022005/arknights-pull-calculator --log` also failed with `Forbidden` at the GitHub API run endpoint, so this instance could not retrieve or independently inspect the runner artifact/body.
+
+The cloud result and runner result describe different network paths. The cloud CONNECT failure is **not** a contradiction of the user's Global HTTP `200` or CN HTTP `404` observations, and must not be substituted for them.
+
+### Evidence required to determine the Global HTML cause
+
+A bounded, manually initiated diagnostic in a network context that can access the official roots can compare the actual Global homepage and `/robots.txt` response metadata and HTML fingerprints:
+
+- Identical response bodies or matching normalized HTML fingerprints, together with the same app/root and script assets, support an SPA fallback diagnosis.
+- Actual challenge/verification markers, forms or explicit protection-provider metadata support a protection-page diagnosis; a generic HTML content type does not.
+- A final URL or redirect to a known error/landing page can support a website routing diagnosis. Any conclusion must retain the observed redirect and response evidence.
+- Missing, contradictory or incomplete evidence must remain **unknown**. A diagnostic hint never authorizes automatic collection, bypassing a challenge, or changing terms-review flags.
+
+No official notice page, public feed/API, linked terms or real banner announcement was verified in this cloud recheck because the official root documents could not be read. No alternative domain, mirror, invented endpoint or access-control bypass was used. Both source adapters must remain gated until the actual source structure and permission are reviewed; the manually reviewed original-announcement import remains the usable path for real data supplied and verified by a reviewer. No public event record or source-policy flag was changed by this investigation.
+
+### Manual bounded source-audit tool execution
+
+The new manually initiated `scripts/audit-sources.mjs` was executed with the platform proxy on **2026-10-20T09:15:10.374Z** (16:15:10 Vietnam). It exited `2` and emitted metadata-only JSON. All four known official roots were attempted once; both homepage and robots requests for each server returned `NETWORK_PROXY_DENIED` before an origin response. Both comparisons were `unavailable`; `collectionEnabled`, `permissionVerified`, `sourcePolicyChanged` and `liveSyncVerified` remained `false`, with `liveRecords: 0`.
+
+The tool did not receive HTML and therefore could not compute real Global fingerprints, discover a real terms/news/feed/API link, or verify an announcement. It made no linked-page or asset requests and changed no source policy, curated record, or public calendar. The separate manual-only **Manually inspect official banner sources** workflow can collect the same bounded evidence in a GitHub-hosted runner; it has `contents: read`, uploads a seven-day artifact, and never commits or enables collection. Its comparison classifications are hypotheses backed by fingerprints/markers, not proof of permission or a live synchronization.
+
+### Explicit official article requested by the user
+
+The user subsequently supplied the actual Global announcement URL **`https://www.arknights.global/news/4814`** for structure inspection and separate human-reviewed banner facts. A supplied official link is a useful review lead; it is not evidence that this machine fetched its body, verified its publication date, or established the publisher's collection terms.
+
+The bounded audit was run with that explicit URL on **2026-10-20T09:18:06.562Z** (16:18:06 Vietnam):
+
+```sh
+node --use-env-proxy scripts/audit-sources.mjs --announcement https://www.arknights.global/news/4814
+```
+
+The optional article read was attempted exactly once, in addition to the four known roots. It also failed with `NETWORK_PROXY_DENIED` before any origin response; the report has `received: false`, no origin HTTP status, no Content-Type, no redirects, `structure.available: false` and no publication candidates. The CLI exited `2`, `liveRecords` stayed `0`, and both collection/permission flags stayed false. No linked article, asset, API or arbitrary URL was requested.
+
+The optional workflow input `announcement_url` supports this same explicitly requested inspection on a GitHub-hosted runner. If actual HTML is received, it reports only observed JSON-LD keys/type names and named publication/modification candidates. Date-only values stay date-only; publication is never converted into an event start date, no banner facts are auto-imported, and the report never establishes collection permission. Human-supplied facts must remain attributed to human review independently of this machine's blocked request.
+
+### Human-reviewed notice 4814 added through the import path
+
+The user supplied the notice title **Sealed With Time**, Global Limited Headhunting, the original source URL above, the event bounds **14 October 2026 08:00 UTC−7** to **28 October 2026 03:59 UTC−7**, Operators **Kal'tsit Esperanta (Limited), Closure, Crackborne**, update day **9 October 2026**, and the section **02 LIMITED HEADHUNTING OPEN – SEALED WITH TIME**.
+
+That user-provided extract was checked and imported with the normal CLI into `data/curated-banners.json` and `public/data/banners.json`. Its review explicitly records `method: user-provided-extract` and `sourceFetched: false`, with five field-specific extracts attributed to the user. This is human-attested data, **not** a fetched HTML fixture or an independently machine-verified announcement. The source update has `publicationPrecision: day` / `publicationKind: updated`; no publication hour was invented. Event boundaries normalize to `2026-10-14T15:00:00.000Z` / `2026-10-28T10:59:00.000Z`, displayed as 22:00 / 17:59 in Vietnam.
+
+The calendar now has this one sourced manual Global entry. No CN confirmation or statistical estimate was manufactured. Re-importing the same packet kept both files byte-identical. The existing live-sync error/`lastSuccessAt: null` remains, and neither terms-review flag was changed. The original-site body and collection permission are still unverified by this machine.

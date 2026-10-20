@@ -586,7 +586,7 @@ export default function App() {
                       <div className="countdown">
                         <CalendarDays size={16} />
                         {effectiveDate < planningToday
-                          ? "Banner đã qua"
+                          ? "Ngày bắt đầu đã qua"
                           : `Còn ${days} ngày để chuẩn bị`}
                         <span>
                           {projected >= data.target

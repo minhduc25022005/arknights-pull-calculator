@@ -35,13 +35,15 @@ Nguồn được phép xét:
 
 **Chưa có lần đồng bộ thông báo thực tế thành công.** Trong môi trường cloud, cả hai trang chủ và `robots.txt` bị proxy chặn CONNECT `403` trước khi kết nối tới website. Chưa xác minh được API/RSS công khai, URL điều khoản hoặc cấu trúc bài thật. Xem bằng chứng và các điều kiện mở adapter tại [docs/source-audit.md](docs/source-audit.md).
 
-Run GitHub Actions `39394219723` / job `118532842204` do người dùng cung cấp ghi nhận CN robots HTTP 404 và Global bị parser cũ đánh giá ambiguous. Các kết quả đó khác đường mạng cloud: tại đây vẫn bị CONNECT 403. HTTP 404 thật không được đánh đồng với proxy 403; riêng thông báo ambiguous cũ chưa chứng minh Global trả HTML hay MIME nào. Bản sửa ghi status, Content-Type và toàn bộ chuỗi redirect an toàn để xác định nguyên nhân ở lần chạy tiếp theo.
+Actions #2, run `39397725727`, đã được người dùng xác nhận: Global robots **200 text/html / ROBOTS_HTML / deny**; CN robots **404 / allow-no-file**, rồi **TERMS_UNREVIEWED / deny**. HTML không phải robots hợp lệ. Chỉ từ MIME không thể kết luận SPA fallback, trang bảo vệ hay cấu hình lỗi. Cloud vẫn bị CONNECT 403 nên chưa độc lập đọc được body/trang chủ/bài thông báo. Không có điều khoản, feed/API hoặc adapter nguồn thật nào được job xác minh cho phép thu thập.
 
-`public/data/banners.json` ban đầu không có sự kiện được bịa sẵn. Calendar trống và cảnh báo đồng bộ là trạng thái có chủ ý khi chưa có dữ liệu được xác minh. Fixture tổng hợp chỉ dùng trong tests, không được phát hành thành banner thật.
+Đã nhập **Sealed With Time** từ [thông báo Global 4814](https://www.arknights.global/news/4814) theo thông tin người dùng cung cấp: Limited, bắt đầu 14/10/2026 08:00 UTC−7, kết thúc 28/10/2026 03:59 UTC−7; Kal'tsit Esperanta (Limited), Closure, Crackborne. Đây là bản ghi `origin: manual`, có review `method: user-provided-extract`, `sourceFetched: false` và trích dẫn theo từng trường trong curated data. Ngày cập nhật nguồn 09/10/2026 được giữ ở độ chính xác ngày; không tự đặt giờ. Chưa khẳng định máy đã đọc được nội dung bài hoặc đã có quyền crawl. Lịch có dữ liệu thủ công thật do người dùng dẫn nguồn trong khi trạng thái live sync vẫn lỗi và `lastSuccessAt` vẫn null.
+
+`public/data/banners.json` ban đầu không có sự kiện được bịa sẵn. Trước khi nhập dữ liệu dẫn nguồn, calendar trống là trạng thái có chủ ý; sau khi nhập thủ công, cảnh báo live sync vẫn được giữ. Fixture tổng hợp chỉ dùng trong tests, không được phát hành thành banner thật.
 
 Sidebar có mục **Lịch banner**: lọc Global/CN/tất cả, tab đang diễn ra/sắp tới/đã kết thúc/**chưa có lịch**, nguồn gốc, ngày đăng, thời điểm cập nhật và countdown. Dữ liệu chính thức chưa công bố ngày được thể hiện riêng. Mốc dự đoán đã qua không có bằng chứng kết thúc sẽ nằm ở “Chưa có lịch”, không được trình bày như sự kiện đã thực sự diễn ra.
 
-Múi giờ mặc định Việt Nam `Asia/Ho_Chi_Minh`, có thể đổi UTC hoặc `Asia/Shanghai`. Mỗi timestamp nhập vào phải có offset rõ ràng, được chuẩn hóa UTC rồi hiển thị theo múi giờ chọn. Không tự suy ra múi giờ Global từ tên server. Giá trị date-only/thiếu offset bị từ chối; ngày đăng thông báo không được dùng thay ngày bắt đầu sự kiện.
+Múi giờ mặc định Việt Nam `Asia/Ho_Chi_Minh`, có thể đổi UTC hoặc `Asia/Shanghai`. Mỗi timestamp nhập vào phải có offset rõ ràng, được chuẩn hóa UTC rồi hiển thị theo múi giờ chọn. Không tự suy ra múi giờ Global từ tên server. Ngày bắt đầu/kết thúc sự kiện và ngày dự đoán thiếu offset bị từ chối. Riêng ngày đăng/cập nhật nguồn chỉ biết ngày được lưu `publicationPrecision: "day"` và `publicationKind: "updated"` hoặc `"published"`, không đổi thành UTC midnight; ngày này không được dùng thay ngày bắt đầu sự kiện.
 
 ## Mô hình dữ liệu, bằng chứng và đối chiếu
 
@@ -70,15 +72,24 @@ Trình duyệt chỉ tải JSON cùng origin ở `/data/banners.json`; không sc
 ```sh
 npm run banners:sync
 npm run banners:diagnose
+npm run banners:audit -- --announcement https://www.arknights.global/news/4814
 npm run banners:check -- /path/to/reviewed-banners.json
 npm run banners:import -- /path/to/reviewed-banners.json
 ```
 
-Trong **Lịch banner**, mở mục thu gọn **Chuẩn bị banner kiểm duyệt thủ công**. Nhập thông tin đúng bài thông báo, link gốc đúng server, ngày đăng và offset ghi rõ; chỉ điền ngày/Operator đã được nguồn xác nhận. Form yêu cầu xác nhận lại sau mỗi thay đổi. Tải `reviewed-banners.json`, chạy `banners:check` để kiểm tra mà **không ghi file**, rồi `banners:import`, xem diff và tạo commit/PR. Trang chủ hoặc anchor chung không đủ làm link thông báo. Form chỉ tạo tệp nhập, không tự công bố vào lịch hay sửa dữ liệu localStorage. Validation không thay thế việc người kiểm duyệt đọc nội dung thật.
+Trong **Lịch banner**, mở mục thu gọn **Chuẩn bị banner kiểm duyệt thủ công**. Nhập thông tin đúng bài thông báo, link gốc đúng server, ngày đăng và offset ghi rõ; chỉ điền ngày/Operator đã được nguồn xác nhận. Điền tên/handle người kiểm duyệt và trích dẫn cho sự kiện, ngày đăng/cập nhật, từng ngày hoặc Operator đã nhập. Nếu chỉ biết ngày cập nhật, chọn độ chính xác ngày thay vì tự điền giờ. Xem bản kiểm tra nguồn/ngày chuẩn hóa/bằng chứng, sau đó xác nhận; sửa dữ liệu sẽ xóa preview và xác nhận. Tải `reviewed-banners.json`, chạy `banners:check` để kiểm tra mà **không ghi file**, rồi `banners:import`, xem diff và tạo commit/PR. Trang chủ hoặc anchor chung không đủ làm link thông báo. Form chỉ tạo tệp nhập, không tự công bố vào lịch hay sửa dữ liệu localStorage. Validation không thay thế việc người kiểm duyệt đọc nội dung thật.
 
-Import nhận `{ "schemaVersion": 1, "events": [...] }` theo kiểu `Banner` trong [src/banners.ts](src/banners.ts). Mọi bản ghi nhập phải có `origin: "manual"`, `reviewed: true`, URL thông báo thật, ngày đăng có offset, server và `confirmedFields` đúng nội dung được kiểm duyệt. Chưa biết Operator thì để `operators: []`; chưa biết ngày thì bỏ `startAt`/`endAt` và dùng trạng thái thích hợp. Sử dụng thời điểm cập nhật mới hơn khi sửa bản ghi, kiểm tra diff rồi review qua GitHub. Không dùng homepage hay bài cộng đồng làm bằng chứng cho ngày chưa được công bố.
+Import nhận `{ "schemaVersion": 1, "events": [...] }` theo kiểu `Banner` trong [src/banners.ts](src/banners.ts). Mọi bản ghi nhập phải có `origin: "manual"`, `reviewed: true`, URL thông báo thật, ngày nguồn có offset hoặc độ chính xác ngày rõ ràng, server và `confirmedFields` đúng nội dung được kiểm duyệt. Gói nhập **mới** không rỗng bắt buộc có `review: {reviewer, reviewedAt, method, sourceFetched: false, evidence: [...]}`. Mỗi evidence gồm `bannerId`, `server`, `sourceUrl`, `field`, `quote`; phải khớp đúng trường/nguồn. `method` là `reviewer-transcription` hoặc `user-provided-extract`, không phải bằng chứng máy đã fetch hoặc suy ra sự thật từ chuỗi trích dẫn. Chưa biết Operator thì để `operators: []`; chưa biết ngày thì bỏ `startAt`/`endAt` và dùng trạng thái thích hợp. Sử dụng thời điểm cập nhật mới hơn khi sửa bản ghi, kiểm tra diff rồi review qua GitHub. Không dùng homepage hay bài cộng đồng làm bằng chứng cho ngày chưa được công bố.
 
-Import hợp lệ được ghi vào `data/curated-banners.json` và hợp nhất vào JSON công khai; không đánh dấu đồng bộ live thành công. Cả curated và public file cần được commit khi nhập thủ công. Dữ liệu mới sai bị từ chối; không thay file public cũ nếu nó không đọc/validate được.
+Hồ sơ review được lưu trong `reviews[]` của `data/curated-banners.json`; dữ liệu curated cũ chưa có hồ sơ vẫn đọc được, không bị di chuyển/xóa, nhưng gói nhập mới thiếu bằng chứng sẽ bị từ chối. Import hợp lệ được hợp nhất vào JSON công khai; không đánh dấu đồng bộ live thành công. Cả curated và public file cần được commit khi nhập thủ công. Dữ liệu mới sai bị từ chối; không thay file public cũ nếu nó không đọc/validate được.
+
+### Điều tra HTML của Global mà không bật adapter
+
+`npm run banners:audit` là thao tác kiểm tra thủ công các URL gốc đã biết. Có thể thêm đúng một URL thông báo chính thức do người dùng chỉ định bằng `--announcement URL`. Tool không quét link tiếp, không chạy JavaScript/captcha, không cập nhật policy hoặc dữ liệu sự kiện.
+
+Báo cáo có status/MIME/redirect, title, fingerprint văn bản HTML, dấu hiệu app shell/challenge và so sánh robots với trang chủ. HTML giống nhau hỗ trợ giả thuyết fallback; marker challenge chỉ là dẫn chứng để xem xét, không tự kết luận hoặc vượt bảo vệ. Link điều khoản/news/feed/API chỉ được liệt kê nếu thực sự xuất hiện trong HTML nhận được, luôn ghi chưa xác minh và không tự truy cập. Với bài được yêu cầu, tool chỉ ghi schema keys/types và ngày đăng/sửa quan sát được, không biến chúng thành ngày bắt đầu banner.
+
+Sau khi workflow được merge vào `main`, **Manually inspect official banner sources** (`.github/workflows/audit-banner-sources.yml`) chỉ hỗ trợ **Run workflow**, quyền `contents: read`, tùy chọn `announcement_url`; artifact `banner-source-manual-audit-<run_id>-<attempt>` giữ 7 ngày. Không có cron/commit/push trong workflow này. Báo cáo kiểm tra không cấp quyền thu thập; exit 2 vẫn thể hiện chưa có xác minh quyền hoặc live sync. Từ cloud, cả bốn URL gốc và bài 4814 đều bị CONNECT 403, nên chưa có bằng chứng body để kết luận nguyên nhân Global.
 
 ### Bật thu thập nguồn thực tế
 

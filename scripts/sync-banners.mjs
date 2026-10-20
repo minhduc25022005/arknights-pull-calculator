@@ -4,6 +4,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { validateCatalog } from "../src/banners.ts";
 import {
+  validateReviewManifest,
+  readReviewHistory,
+  appendReviewHistory,
+} from "./manual-review.mjs";
+import {
   SOURCES,
   collectSource,
   validateManual,
@@ -30,7 +35,7 @@ async function atomic(file, value) {
   await rename(temp, file);
   return true;
 }
-async function commitImport(manual, catalog) {
+async function commitImport(curatedDocument, catalog) {
   // Stage both validated files before touching either destination. On a detected
   // second-rename failure restore the first file; a process crash is retry-safe.
   const originals = await Promise.all([
@@ -41,7 +46,7 @@ async function commitImport(manual, catalog) {
     `${curatedPath}.${process.pid}.import.tmp`,
     `${output}.${process.pid}.import.tmp`,
   ];
-  const values = [{ schemaVersion: 1, events: manual }, catalog];
+  const values = [curatedDocument, catalog];
   try {
     for (let i = 0; i < 2; i++)
       await writeFile(staged[i], JSON.stringify(values[i], null, 2) + "\n", {
@@ -60,7 +65,10 @@ async function commitImport(manual, catalog) {
         if (error.code !== "ENOENT") throw error;
       });
   }
-  return originals[1] !== JSON.stringify(catalog, null, 2) + "\n";
+  return originals.some(
+    (original, index) =>
+      original !== JSON.stringify(values[index], null, 2) + "\n",
+  );
 }
 async function main() {
   const args = process.argv.slice(2),
@@ -74,17 +82,28 @@ async function main() {
     );
   // An invalid existing file is a hard error: never replace unreadable historical data.
   const previous = validateCatalog(await json(output));
-  const curated = validateManual(await json(curatedPath));
+  const curatedDocument = await json(curatedPath);
+  const curated = validateManual(curatedDocument);
+  const existingReviews = readReviewHistory(curatedDocument);
   if (importing || check) {
-    const incoming = validateManual(
-      await json(path.resolve(process.cwd(), args[1])),
-    );
+    const packet = await json(path.resolve(process.cwd(), args[1]));
+    const incoming = validateManual(packet);
+    const review = validateReviewManifest(packet, incoming);
     const manual = validateManual({
       schemaVersion: 1,
       events: [...curated, ...incoming],
     });
     const catalog = importCatalog(previous, manual, now);
-    const changed = check ? false : await commitImport(manual, catalog);
+    const reviews = appendReviewHistory(existingReviews, review);
+    const nextCurated = {
+      ...curatedDocument,
+      schemaVersion: 1,
+      events: manual,
+      ...(reviews.length || Object.hasOwn(curatedDocument, "reviews")
+        ? { reviews }
+        : {}),
+    };
+    const changed = check ? false : await commitImport(nextCurated, catalog);
     console.log(
       JSON.stringify(
         {
@@ -100,6 +119,10 @@ async function main() {
               confirmedFields: source.confirmedFields,
             })),
           ),
+          verification: review ? "human-attested" : "no-records",
+          reviewMethod: review?.method ?? null,
+          sourceFetched: false,
+          reviewEvidenceCount: review?.evidence.length ?? 0,
           liveSyncVerified: false,
         },
         null,

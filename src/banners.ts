@@ -7,7 +7,10 @@ export type ConfirmedField = "event" | "operators" | "startAt" | "endAt";
 export interface BannerSource {
   url: string;
   name: string;
+  /** Exact instant by default; a calendar date only when precision is explicitly day. */
   publishedAt: string;
+  publicationKind?: "published" | "updated";
+  publicationPrecision?: "day" | "instant";
   server: Server;
   confirmedFields: ConfirmedField[];
   kind: "official" | "community";
@@ -76,6 +79,21 @@ function member<T extends string>(
   if (typeof value !== "string" || !allowed.includes(value as T))
     throw new Error(`Invalid ${label}`);
   return value as T;
+}
+/** Calendar metadata has no time or implied timezone; do not pass through Date parsing. */
+function validCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
+  const [year, month, date] = value.split("-").map(Number);
+  // setUTCFullYear avoids Date.UTC treating years 00–99 as 1900–1999.
+  const calendar = new Date(0);
+  calendar.setUTCFullYear(year, month - 1, date);
+  calendar.setUTCHours(0, 0, 0, 0);
+  return (
+    calendar.getUTCFullYear() === year &&
+    calendar.getUTCMonth() === month - 1 &&
+    calendar.getUTCDate() === date
+  );
 }
 /** Reject date-only / local timestamps: host timezone must never invent an instant. */
 export function validInstant(value: unknown): value is string {
@@ -156,14 +174,46 @@ function source(value: unknown): BannerSource {
       x.confirmedFields.map((v) => member(v, fields, "confirmed field")),
     ),
   ].sort();
-  return {
+  const publicationPrecision =
+    x.publicationPrecision === undefined
+      ? undefined
+      : member(
+          x.publicationPrecision,
+          ["day", "instant"] as const,
+          "publication precision",
+        );
+  const publicationKind =
+    x.publicationKind === undefined
+      ? undefined
+      : member(
+          x.publicationKind,
+          ["published", "updated"] as const,
+          "publication kind",
+        );
+  let publishedAt: string;
+  if (publicationPrecision === "day") {
+    if (!validCalendarDate(x.publishedAt))
+      throw new Error(
+        "Invalid publication date: a real calendar date is required for day precision",
+      );
+    publishedAt = x.publishedAt;
+  } else {
+    publishedAt = instant(x.publishedAt, "publication date");
+  }
+  const normalized: BannerSource = {
     url,
     name: text(x.name, "source name"),
-    publishedAt: instant(x.publishedAt, "publication date"),
+    publishedAt,
     server,
     confirmedFields,
     kind,
   };
+  // Keep old ISO source objects structurally identical for local catalog compatibility.
+  if (publicationPrecision !== undefined)
+    normalized.publicationPrecision = publicationPrecision;
+  if (publicationKind !== undefined)
+    normalized.publicationKind = publicationKind;
+  return normalized;
 }
 function estimate(value: unknown): BannerEstimate {
   const x = object(value);
@@ -529,6 +579,20 @@ export function formatBannerTime(
     hourCycle: "h23",
     timeZoneName: "shortOffset",
   }).format(new Date(iso));
+}
+/** Render source metadata without fabricating an hour for day-only notices. */
+export function formatSourceDate(
+  source: BannerSource,
+  timeZone = "Asia/Ho_Chi_Minh",
+): string {
+  const updated = source.publicationKind === "updated";
+  if (source.publicationPrecision === "day") {
+    if (!validCalendarDate(source.publishedAt))
+      throw new Error("Invalid publication calendar date");
+    const date = source.publishedAt.split("-").reverse().join("/");
+    return `${updated ? "Ngày cập nhật" : "Ngày đăng"}: ${date} (chưa có giờ)`;
+  }
+  return `${updated ? "Cập nhật" : "Đăng"}: ${formatBannerTime(source.publishedAt, timeZone)}`;
 }
 export function phase(
   banner: Banner,
