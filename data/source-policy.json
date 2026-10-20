@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "Global": {
+      "termsReview": {
+        "reviewed": false,
+        "url": null,
+        "reviewedAt": null,
+        "reviewedBy": null,
+        "permitsAutomatedCollection": false,
+        "notes": "Official homepage, robots.txt and terms could not be reviewed: environment CONNECT proxy returned 403. Review actual official linked terms before enabling collection."
+      }
+    },
+    "CN": {
+      "termsReview": {
+        "reviewed": false,
+        "url": null,
+        "reviewedAt": null,
+        "reviewedBy": null,
+        "permitsAutomatedCollection": false,
+        "notes": "Official homepage, robots.txt and terms could not be reviewed: environment CONNECT proxy returned 403. Review actual official linked terms before enabling collection."
+      }
+    }
+  }
+}

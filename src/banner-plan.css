@@ -1,0 +1,102 @@
+.lower-grid {
+  align-items: start;
+}
+.banner-plan {
+  margin: 15px 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #30383d;
+}
+.planner select,
+.banner-plan select {
+  font: inherit;
+  font-size: 11px;
+  background: #111619;
+  border: 1px solid #30383e;
+  border-radius: 5px;
+  color: #dce2e0;
+  width: 100%;
+  padding: 10px;
+  min-width: 0;
+}
+.planner select:focus-visible {
+  outline: 1px solid #b7ca8a;
+}
+.plan-origin {
+  font-size: 10px;
+  line-height: 1.7;
+  color: #b9cb92;
+  margin: 12px 0;
+}
+.scenario-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+.scenario-grid.single {
+  grid-template-columns: 1fr;
+}
+.scenario {
+  background: #111719;
+  border: 1px dashed #6f6045;
+  padding: 10px 8px;
+  border-radius: 5px;
+  min-width: 0;
+}
+.scenario-grid.single .scenario {
+  border: 1px solid #456c5b;
+}
+.scenario > span {
+  display: block;
+  font-size: 8px;
+  line-height: 1.6;
+  color: #cdb68a;
+}
+.scenario strong {
+  display: block;
+  font-size: 22px;
+  color: #d8e99c;
+  margin: 7px 0;
+}
+.scenario strong small {
+  font-size: 9px;
+  font-weight: 400;
+  color: #96a18a;
+}
+.scenario time,
+.scenario > small {
+  display: block;
+  font-size: 8px;
+  line-height: 1.6;
+  color: #95a1a6;
+  overflow-wrap: anywhere;
+}
+.planner .field input:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.planner > .field + .field {
+  margin-top: 14px;
+}
+.planner > .hint {
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+@media (max-width: 760px) {
+  .scenario-grid {
+    grid-template-columns: 1fr;
+  }
+  .scenario {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+  }
+  .scenario strong {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+  .scenario time {
+    grid-column: 1;
+  }
+}

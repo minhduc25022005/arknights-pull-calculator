@@ -7,22 +7,29 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "banners:sync": "node --use-env-proxy scripts/sync-banners.mjs",
+    "banners:import": "node --use-env-proxy scripts/sync-banners.mjs --import"
   },
   "dependencies": {
+    "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^3.0.0",
-    "lucide-react": "^0.468.0"
+    "recharts": "^3.0.0"
   },
   "devDependencies": {
-    "typescript": "~5.8.3",
-    "vite": "^6.3.0",
-    "@vitejs/plugin-react": "^4.4.0",
+    "@tailwindcss/vite": "^4.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "cheerio": "^1.2.0",
+    "robots-parser": "^3.0.1",
     "tailwindcss": "^4.1.0",
-    "@tailwindcss/vite": "^4.1.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.0",
     "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }

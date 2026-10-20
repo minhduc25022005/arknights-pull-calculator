@@ -1,0 +1,48 @@
+name: Update official banner calendar
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: banner-calendar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Collect and validate official public data
+        id: sync
+        continue-on-error: true
+        run: npm run banners:sync
+      - run: npm test
+      - run: npm run build
+      - name: Commit only validated public-data changes
+        run: |
+          if git diff --quiet -- public/data/banners.json; then
+            echo 'No semantic public-data change.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- public/data/banners.json
+          git diff --cached --check
+          git commit -m 'Update public Arknights banner calendar'
+          git push
+      - name: Report unsuccessful live synchronization
+        if: steps.sync.outcome != 'success'
+        run: |
+          echo 'Live official synchronization did not succeed. Last valid events were retained; check the source-policy review and source-access diagnostics.'
+          exit 1
