@@ -9,7 +9,9 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "banners:sync": "node --use-env-proxy scripts/sync-banners.mjs",
-    "banners:import": "node --use-env-proxy scripts/sync-banners.mjs --import"
+    "banners:import": "node --use-env-proxy scripts/sync-banners.mjs --import",
+    "banners:diagnose": "node --use-env-proxy scripts/sync-banners.mjs --diagnose",
+    "banners:check": "node --use-env-proxy scripts/sync-banners.mjs --check"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

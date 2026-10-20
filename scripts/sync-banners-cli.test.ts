@@ -62,6 +62,7 @@ async function workspace() {
     "scripts/sync-banners.mjs",
     "scripts/banner-pipeline.mjs",
     "src/banners.ts",
+    "src/announcement-url.ts",
   ])
     await copyFile(path.join(repository, file), path.join(root, file));
   await symlink(
@@ -81,6 +82,16 @@ async function workspace() {
     path.join(root, "public/data/banners.json"),
     JSON.stringify(initial),
   );
+  await writeFile(
+    path.join(root, "data/source-policy.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      sources: {
+        Global: { termsReview: { reviewed: false } },
+        CN: { termsReview: { reviewed: false } },
+      },
+    }),
+  );
   return root;
 }
 function runImport(root: string) {
@@ -96,6 +107,88 @@ function runImport(root: string) {
   );
 }
 describe("manual CLI safety in an isolated checkout", () => {
+  it("checks a reviewed file and its original source without changing either data file", async () => {
+    const root = await workspace();
+    await writeFile(
+      path.join(root, "incoming.json"),
+      JSON.stringify({ schemaVersion: 1, events: [fixture] }),
+    );
+    const files = [
+      path.join(root, "data/curated-banners.json"),
+      path.join(root, "public/data/banners.json"),
+    ];
+    const before = await Promise.all(
+      files.map((file) => readFile(file, "utf8")),
+    );
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/sync-banners.mjs", "--check", "incoming.json"],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      mode: "reviewed-manual-check",
+      records: 1,
+      written: false,
+      changed: false,
+      liveSyncVerified: false,
+    });
+    expect(JSON.parse(result.stdout).sourceLinks[0].url).toBe(
+      fixture.sources[0].url,
+    );
+    expect(
+      await Promise.all(files.map((file) => readFile(file, "utf8"))),
+    ).toEqual(before);
+  });
+  it("diagnoses HTTP status and content type without overwriting public data or claiming live sync", async () => {
+    const root = await workspace();
+    const files = [
+      path.join(root, "data/curated-banners.json"),
+      path.join(root, "public/data/banners.json"),
+    ];
+    const before = await Promise.all(
+      files.map((file) => readFile(file, "utf8")),
+    );
+    await writeFile(
+      path.join(root, "mock-fetch.mjs"),
+      `globalThis.fetch=async function(url){return String(url).includes('hypergryph')?new Response('not found',{status:404,headers:{'content-type':'text/plain'}}):new Response('<html>synthetic SPA fallback</html>',{headers:{'content-type':'text/html'}})};`,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "./mock-fetch.mjs",
+        "scripts/sync-banners.mjs",
+        "--diagnose",
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(result.status, result.stderr).toBe(2);
+    const report = JSON.parse(result.stdout);
+    expect(report).toMatchObject({
+      mode: "source-diagnostics",
+      written: false,
+      changed: false,
+      liveRecords: 0,
+      status: "error",
+    });
+    expect(
+      report.sources
+        .find((s: { server: string }) => s.server === "CN")
+        .diagnostics.some((d: { httpStatus: number }) => d.httpStatus === 404),
+    ).toBe(true);
+    expect(
+      report.sources
+        .find((s: { server: string }) => s.server === "Global")
+        .diagnostics.some((d: { contentType?: string }) =>
+          d.contentType?.includes("text/html"),
+        ),
+    ).toBe(true);
+    expect(result.stdout).not.toContain("synthetic SPA fallback");
+    expect(
+      await Promise.all(files.map((file) => readFile(file, "utf8"))),
+    ).toEqual(before);
+  });
   it("imports reviewed data to curated and public files without claiming live sync", async () => {
     const root = await workspace();
     await writeFile(

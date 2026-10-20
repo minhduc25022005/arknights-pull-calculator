@@ -65,14 +65,17 @@ async function commitImport(manual, catalog) {
 async function main() {
   const args = process.argv.slice(2),
     now = new Date().toISOString();
-  if (args.length && !(args.length === 2 && args[0] === "--import"))
+  const diagnose = args.length === 1 && args[0] === "--diagnose";
+  const check = args.length === 2 && args[0] === "--check";
+  const importing = args.length === 2 && args[0] === "--import";
+  if (args.length && !diagnose && !check && !importing)
     throw new Error(
-      "Usage: npm run banners:sync | npm run banners:import -- <reviewed-file.json>",
+      "Usage: npm run banners:sync | npm run banners:diagnose | npm run banners:check -- <reviewed-file.json> | npm run banners:import -- <reviewed-file.json>",
     );
   // An invalid existing file is a hard error: never replace unreadable historical data.
   const previous = validateCatalog(await json(output));
   const curated = validateManual(await json(curatedPath));
-  if (args[0] === "--import") {
+  if (importing || check) {
     const incoming = validateManual(
       await json(path.resolve(process.cwd(), args[1])),
     );
@@ -81,14 +84,22 @@ async function main() {
       events: [...curated, ...incoming],
     });
     const catalog = importCatalog(previous, manual, now);
-    const changed = await commitImport(manual, catalog);
+    const changed = check ? false : await commitImport(manual, catalog);
     console.log(
       JSON.stringify(
         {
-          mode: "reviewed-manual-import",
+          mode: check ? "reviewed-manual-check" : "reviewed-manual-import",
           records: incoming.length,
           total: catalog.events.length,
           changed,
+          written: !check,
+          sourceLinks: incoming.flatMap((event) =>
+            event.sources.map((source) => ({
+              server: source.server,
+              url: source.url,
+              confirmedFields: source.confirmedFields,
+            })),
+          ),
           liveSyncVerified: false,
         },
         null,
@@ -107,18 +118,25 @@ async function main() {
     );
   const report = {};
   const catalog = mergeResults(previous, curated, results, now, report);
-  const changed = await atomic(output, catalog);
+  const changed = diagnose ? false : await atomic(output, catalog);
   const liveRecords = report.acceptedRecords;
   console.log(
     JSON.stringify(
       {
-        mode: "live-sync",
+        mode: diagnose ? "source-diagnostics" : "live-sync",
         attemptedAt: now,
         changed,
+        written: !diagnose,
         total: catalog.events.length,
         liveRecords,
         status: catalog.sync.status,
         warnings: catalog.sync.warnings,
+        sources: results.map((result) => ({
+          server: result.server,
+          success: result.success,
+          records: result.events.length,
+          diagnostics: result.diagnostics ?? [],
+        })),
       },
       null,
       2,
